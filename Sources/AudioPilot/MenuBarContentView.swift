@@ -88,6 +88,9 @@ struct MenuBarContentView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.tint)
                 Spacer()
+                Text("AudioPilot · by 4IngoJ")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -145,7 +148,6 @@ struct DeviceSectionView: View {
     @EnvironmentObject var settings: UserSettings
     @State private var expanded = false
     @State private var dropTargetedHide  = false
-    @State private var dropTargetDevice: AudioDevice?
 
     private var visibleDevices: [AudioDevice] { settings.orderedVisible(devices, isInput: isInput) }
     private var hiddenDevices:  [AudioDevice] { settings.orderedHidden(devices,  isInput: isInput) }
@@ -171,27 +173,6 @@ struct DeviceSectionView: View {
                             onSelect: { onSelect(device) },
                             onHide: { settings.toggleHidden(device, isInput: isInput) }
                         )
-                        .overlay(alignment: .top) {
-                            if dropTargetDevice?.id == device.id {
-                                RoundedRectangle(cornerRadius: 1)
-                                    .fill(Color.accentColor)
-                                    .frame(height: 2)
-                                    .padding(.horizontal, 6)
-                            }
-                        }
-                        .draggable(device)
-                        .dropDestination(for: AudioDevice.self) { items, _ in
-                            guard let dropped = items.first else { return false }
-                            // Unhide first if the dragged device was hidden
-                            if settings.isHidden(dropped, isInput: isInput) {
-                                settings.toggleHidden(dropped, isInput: isInput)
-                            }
-                            settings.moveDevice(named: dropped.name, before: device.name,
-                                                isInput: isInput, allDevices: devices)
-                            return true
-                        } isTargeted: { targeted in
-                            dropTargetDevice = targeted ? device : nil
-                        }
                     }
                 }
 
@@ -255,7 +236,6 @@ struct PresetsView: View {
     @EnvironmentObject var settings: UserSettings
     @State private var expandedHidden   = false
     @State private var dropTargetedHide = false
-    @State private var dropTargetPreset: AudioPreset?
 
     private var visiblePresets: [AudioPreset] { settings.presets.filter { !settings.isPresetHidden($0) } }
     private var hiddenPresets:  [AudioPreset] { settings.presets.filter {  settings.isPresetHidden($0) } }
@@ -269,27 +249,6 @@ struct PresetsView: View {
             // ── Visible presets ────────────────────────────────────
             ForEach(visiblePresets) { preset in
                 PresetRowView(preset: preset, onApply: { applyPreset(preset) })
-                    .overlay(alignment: .top) {
-                        if dropTargetPreset?.id == preset.id {
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(Color.accentColor)
-                                .frame(height: 2)
-                                .padding(.horizontal, 6)
-                        }
-                    }
-                    .draggable(preset)
-                    .dropDestination(for: AudioPreset.self) { items, _ in
-                        guard let dropped = items.first,
-                              let from = settings.presets.firstIndex(where: { $0.id == dropped.id }),
-                              let to   = settings.presets.firstIndex(where: { $0.id == preset.id })
-                        else { return false }
-                        if settings.isPresetHidden(dropped) { settings.togglePresetHidden(dropped) }
-                        settings.movePresets(from: IndexSet(integer: from),
-                                             to: to > from ? to + 1 : to)
-                        return true
-                    } isTargeted: { targeted in
-                        dropTargetPreset = targeted ? preset : nil
-                    }
             }
 
             // ── "Weitere Presets" section ──────────────────────────
@@ -328,7 +287,6 @@ struct PresetsView: View {
                         VStack(spacing: 2) {
                             ForEach(hiddenPresets) { preset in
                                 HiddenPresetRowView(preset: preset)
-                                    .draggable(preset)
                             }
                         }
                         .padding(.leading, 10)
@@ -391,11 +349,6 @@ struct PresetRowView: View {
             .frame(maxWidth: .infinity)
 
             HStack(spacing: 4) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.caption2)
-                    .foregroundColor(.secondary.opacity(isHovered ? 0.55 : 0.18))
-                    .frame(width: 14)
-
                 if isRenaming {
                     Button(action: commitRename) {
                         Image(systemName: "checkmark")
@@ -441,7 +394,7 @@ struct PresetRowView: View {
                     .allowsHitTesting(isHovered)
                 }
             }
-            .frame(width: 64)
+            .frame(width: 50)
         }
         .padding(.vertical, 2)
         .padding(.horizontal, 6)
@@ -486,24 +439,16 @@ struct HiddenPresetRowView: View {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 4) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.caption2)
-                    .foregroundColor(.secondary.opacity(isHovered ? 0.55 : 0.18))
-                    .frame(width: 14)
-
-                Button(action: { settings.togglePresetHidden(preset) }) {
-                    Image(systemName: "eye")
-                        .font(.caption)
-                        .foregroundColor(.secondary.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-                .help("Zurück in die Hauptliste")
-                .opacity(isHovered ? 1 : 0)
-                .allowsHitTesting(isHovered)
-                .frame(width: 16)
+            Button(action: { settings.togglePresetHidden(preset) }) {
+                Image(systemName: "eye")
+                    .font(.caption)
+                    .foregroundColor(.secondary.opacity(0.7))
             }
-            .frame(width: 34)
+            .buttonStyle(.plain)
+            .help("Zurück in die Hauptliste")
+            .opacity(isHovered ? 1 : 0)
+            .allowsHitTesting(isHovered)
+            .frame(width: 16)
         }
         .padding(.vertical, 2)
         .padding(.horizontal, 6)

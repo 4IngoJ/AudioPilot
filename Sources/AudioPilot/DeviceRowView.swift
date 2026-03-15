@@ -47,13 +47,6 @@ struct DeviceRowView: View {
 
             // ── Right action group (fixed width, no layout jumps) ──
             HStack(spacing: 4) {
-                // Drag handle: only visible on hover
-                Image(systemName: "line.3.horizontal")
-                    .font(.caption2)
-                    .foregroundColor(.secondary.opacity(0.6))
-                    .frame(width: 14)
-                    .opacity(isHovered ? 1 : 0)
-
                 if isRenaming {
                     Button(action: commitRename) {
                         Image(systemName: "checkmark")
@@ -90,7 +83,7 @@ struct DeviceRowView: View {
                     .allowsHitTesting(isHovered)
                 }
             }
-            .frame(width: 52)
+            .frame(width: 38)
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
