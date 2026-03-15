@@ -53,8 +53,6 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
-    <key>NSPrincipalClass</key>
-    <string>NSApplication</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
 </dict>
