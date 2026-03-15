@@ -8,6 +8,16 @@ A lightweight macOS menu bar app for switching audio input and output devices in
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/input-devices.png" width="280" alt="Input device selection"/>
+  &nbsp;&nbsp;
+  <img src="screenshots/output-presets.png" width="280" alt="Output device selection and presets"/>
+</p>
+
+---
+
 ## Features
 
 - **Menu bar at a glance** — active mic and headphone device always visible
