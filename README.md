@@ -8,23 +8,24 @@ A lightweight macOS menu bar app for switching audio input and output devices in
 
 ---
 
-## Screenshots
+## Screenshot
 
 <p align="center">
-  <img src="screenshots/input-devices.png" width="280" alt="Input device selection"/>
-  &nbsp;&nbsp;
-  <img src="screenshots/output-presets.png" width="280" alt="Output device selection and presets"/>
+  <img src="screenshots/preview.png" width="300" alt="AudioPilot menu bar popover"/>
 </p>
 
 ---
 
 ## Features
 
-- **Menu bar at a glance** — active mic and headphone device always visible
+- **Menu bar at a glance** — active mic and speaker device always visible in the menu bar
 - **One-click switching** — instantly set any input or output device as default
 - **Volume slider** — control system output volume right from the popover
 - **Custom aliases** — rename long device names to something short (e.g. "Wave XLR" → "Podcast")
+- **Hide devices** — move rarely used devices into a collapsible "Weitere Geräte" section per Input/Output
+- **Hover actions** — rename (✏️) and hide (👁) buttons appear on hover, keeping the UI clean
 - **Presets** — save input + output combinations and recall them with a single click
+- **Hide presets** — tuck away presets you don't need daily into a collapsible section
 - **Live updates** — detects newly connected or disconnected devices automatically
 - **No Dock icon** — lives quietly in the menu bar, out of the way
 
@@ -32,7 +33,7 @@ A lightweight macOS menu bar app for switching audio input and output devices in
 
 ## Download
 
-**[⬇️ Download AudioPilot v1.0.0](../../releases/latest)**
+**[⬇️ Download AudioPilot v1.3.0](../../releases/latest)**
 
 Open the `.dmg`, drag **AudioPilot** into your Applications folder, then:
 
@@ -47,10 +48,14 @@ Open the `.dmg`, drag **AudioPilot** into your Applications folder, then:
 | Switch input device | Click menu bar icon → click any mic in the Input list |
 | Switch output device | Click menu bar icon → click any speaker in the Output list |
 | Adjust volume | Drag the slider at the top of the popover |
-| Rename a device | Click the ✏️ pencil icon next to any device name |
+| Rename a device | Hover over a device → click the ✏️ pencil icon |
+| Hide a device | Hover over a device → click the 👁 eye icon |
+| Unhide a device | Expand "Weitere Geräte" → click the 👁 eye icon |
 | Save a preset | Click **"Als Preset speichern"** at the bottom of the popover |
 | Apply a preset | Click the ▶ play icon next to a saved preset |
-| Delete a preset | Click the 🗑 trash icon next to a preset |
+| Rename a preset | Hover over a preset → click the ✏️ pencil icon |
+| Hide a preset | Hover over a preset → click the 👁 eye icon |
+| Delete a preset | Hover over a preset → click the 🗑 trash icon |
 | Quit | Click the power icon in the header |
 
 ---
@@ -91,7 +96,7 @@ AudioPilot/
 │   ├── AudioManager.swift         # CoreAudio wrapper (devices, volume, listeners)
 │   ├── MenuBarContentView.swift   # Popover UI (volume, device lists, presets)
 │   ├── DeviceRowView.swift        # Single device row with inline rename
-│   └── UserSettings.swift         # Aliases & presets (UserDefaults persistence)
+│   └── UserSettings.swift         # Aliases, presets, device order & visibility
 ├── Package.swift                  # Swift Package Manager config
 ├── build.sh                       # Compile + bundle script
 └── dist.sh                        # Build + DMG packaging script
