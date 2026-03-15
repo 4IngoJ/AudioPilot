@@ -1,10 +1,12 @@
 import CoreAudio
 import Foundation
+import SwiftUI
+import UniformTypeIdentifiers
 
 // kAudioHardwareServiceDeviceProperty_VirtualMasterVolume = 'vmvc'
 private let kVirtualMasterVolume: AudioObjectPropertySelector = 0x766D7663
 
-struct AudioDevice: Identifiable, Equatable, Hashable {
+struct AudioDevice: Identifiable, Equatable, Hashable, Codable {
     let id: AudioObjectID
     let name: String
     let hasInput: Bool
@@ -224,5 +226,17 @@ class AudioManager: ObservableObject {
             self.defaultOutputDevice = self.getDefaultDevice(selector: kAudioHardwarePropertyDefaultOutputDevice)
             self.refreshVolume()
         }
+    }
+}
+
+// MARK: - Transferable (for drag & drop)
+
+extension UTType {
+    static let audioDevice = UTType(exportedAs: "com.audiopilot.audiodevice")
+}
+
+extension AudioDevice: Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .audioDevice)
     }
 }

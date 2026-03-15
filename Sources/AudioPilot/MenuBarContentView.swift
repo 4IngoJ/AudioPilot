@@ -179,13 +179,18 @@ struct DeviceSectionView: View {
                                     .padding(.horizontal, 6)
                             }
                         }
-                        .onDrag { NSItemProvider(object: device.name as NSString) }
-                        .onDrop(of: [.text],
-                                isTargeted: Binding(
-                                    get: { dropTargetDevice?.id == device.id },
-                                    set: { dropTargetDevice = $0 ? device : nil }
-                                )) { providers in
-                            handleRowDrop(providers, onto: device)
+                        .draggable(device)
+                        .dropDestination(for: AudioDevice.self) { items, _ in
+                            guard let dropped = items.first else { return false }
+                            // Unhide first if the dragged device was hidden
+                            if settings.isHidden(dropped, isInput: isInput) {
+                                settings.toggleHidden(dropped, isInput: isInput)
+                            }
+                            settings.moveDevice(named: dropped.name, before: device.name,
+                                                isInput: isInput, allDevices: devices)
+                            return true
+                        } isTargeted: { targeted in
+                            dropTargetDevice = targeted ? device : nil
                         }
                     }
                 }
@@ -215,9 +220,12 @@ struct DeviceSectionView: View {
                         )
                         .contentShape(Rectangle())
                         .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() } }
-                        .onDrop(of: [.text], isTargeted: $dropTargetedHide) { providers in
-                            handleHideDrop(providers)
-                        }
+                        .dropDestination(for: AudioDevice.self) { items, _ in
+                            guard let dropped = items.first,
+                                  !settings.isHidden(dropped, isInput: isInput) else { return false }
+                            settings.toggleHidden(dropped, isInput: isInput)
+                            return true
+                        } isTargeted: { dropTargetedHide = $0 }
 
                         if expanded {
                             VStack(spacing: 2) {
@@ -226,7 +234,7 @@ struct DeviceSectionView: View {
                                         device: device,
                                         onUnhide: { settings.toggleHidden(device, isInput: isInput) }
                                     )
-                                    .onDrag { NSItemProvider(object: device.name as NSString) }
+                                    .draggable(device)
                                 }
                             }
                             .padding(.leading, 10)
@@ -237,37 +245,6 @@ struct DeviceSectionView: View {
                 }
             }
         }
-    }
-
-    // Drop onto a visible row → reorder (+ unhide if needed)
-    private func handleRowDrop(_ providers: [NSItemProvider], onto target: AudioDevice) -> Bool {
-        providers.first?.loadObject(ofClass: NSString.self) { item, _ in
-            guard let name = item as? String else { return }
-            DispatchQueue.main.async {
-                if let device = devices.first(where: { $0.name == name }),
-                   settings.isHidden(device, isInput: isInput) {
-                    settings.toggleHidden(device, isInput: isInput)
-                }
-                settings.moveDevice(named: name, before: target.name,
-                                    isInput: isInput, allDevices: devices)
-                dropTargetDevice = nil
-            }
-        }
-        return true
-    }
-
-    // Drop onto "Weitere Geräte" header → hide
-    private func handleHideDrop(_ providers: [NSItemProvider]) -> Bool {
-        providers.first?.loadObject(ofClass: NSString.self) { item, _ in
-            guard let name = item as? String,
-                  let device = devices.first(where: { $0.name == name }) else { return }
-            DispatchQueue.main.async {
-                if !settings.isHidden(device, isInput: isInput) {
-                    settings.toggleHidden(device, isInput: isInput)
-                }
-            }
-        }
-        return true
     }
 }
 
@@ -300,13 +277,18 @@ struct PresetsView: View {
                                 .padding(.horizontal, 6)
                         }
                     }
-                    .onDrag { NSItemProvider(object: preset.id.uuidString as NSString) }
-                    .onDrop(of: [.text],
-                            isTargeted: Binding(
-                                get: { dropTargetPreset?.id == preset.id },
-                                set: { dropTargetPreset = $0 ? preset : nil }
-                            )) { providers in
-                        handlePresetRowDrop(providers, onto: preset)
+                    .draggable(preset)
+                    .dropDestination(for: AudioPreset.self) { items, _ in
+                        guard let dropped = items.first,
+                              let from = settings.presets.firstIndex(where: { $0.id == dropped.id }),
+                              let to   = settings.presets.firstIndex(where: { $0.id == preset.id })
+                        else { return false }
+                        if settings.isPresetHidden(dropped) { settings.togglePresetHidden(dropped) }
+                        settings.movePresets(from: IndexSet(integer: from),
+                                             to: to > from ? to + 1 : to)
+                        return true
+                    } isTargeted: { targeted in
+                        dropTargetPreset = targeted ? preset : nil
                     }
             }
 
@@ -335,15 +317,18 @@ struct PresetsView: View {
                     )
                     .contentShape(Rectangle())
                     .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { expandedHidden.toggle() } }
-                    .onDrop(of: [.text], isTargeted: $dropTargetedHide) { providers in
-                        handlePresetHideDrop(providers)
-                    }
+                    .dropDestination(for: AudioPreset.self) { items, _ in
+                        guard let dropped = items.first,
+                              !settings.isPresetHidden(dropped) else { return false }
+                        settings.togglePresetHidden(dropped)
+                        return true
+                    } isTargeted: { dropTargetedHide = $0 }
 
                     if expandedHidden {
                         VStack(spacing: 2) {
                             ForEach(hiddenPresets) { preset in
                                 HiddenPresetRowView(preset: preset)
-                                    .onDrag { NSItemProvider(object: preset.id.uuidString as NSString) }
+                                    .draggable(preset)
                             }
                         }
                         .padding(.leading, 10)
@@ -362,36 +347,6 @@ struct PresetsView: View {
         if let output = audioManager.outputDevices.first(where: { $0.name == preset.outputDeviceName }) {
             audioManager.setDefaultOutput(output)
         }
-    }
-
-    private func handlePresetRowDrop(_ providers: [NSItemProvider], onto target: AudioPreset) -> Bool {
-        providers.first?.loadObject(ofClass: NSString.self) { item, _ in
-            guard let idStr = item as? String, let id = UUID(uuidString: idStr) else { return }
-            DispatchQueue.main.async {
-                guard let from = settings.presets.firstIndex(where: { $0.id == id }),
-                      let to   = settings.presets.firstIndex(where: { $0.id == target.id }) else { return }
-                if let preset = settings.presets.first(where: { $0.id == id }),
-                   settings.isPresetHidden(preset) {
-                    settings.togglePresetHidden(preset)
-                }
-                settings.movePresets(from: IndexSet(integer: from), to: to > from ? to + 1 : to)
-                dropTargetPreset = nil
-            }
-        }
-        return true
-    }
-
-    private func handlePresetHideDrop(_ providers: [NSItemProvider]) -> Bool {
-        providers.first?.loadObject(ofClass: NSString.self) { item, _ in
-            guard let idStr = item as? String, let id = UUID(uuidString: idStr) else { return }
-            DispatchQueue.main.async {
-                if let preset = settings.presets.first(where: { $0.id == id }),
-                   !settings.isPresetHidden(preset) {
-                    settings.togglePresetHidden(preset)
-                }
-            }
-        }
-        return true
     }
 }
 
@@ -479,9 +434,11 @@ struct PresetRowView: View {
                     Button(action: { settings.removePreset(id: preset.id) }) {
                         Image(systemName: "trash")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.secondary.opacity(0.7))
                     }
                     .buttonStyle(.plain)
+                    .opacity(isHovered ? 1 : 0)
+                    .allowsHitTesting(isHovered)
                 }
             }
             .frame(width: 64)

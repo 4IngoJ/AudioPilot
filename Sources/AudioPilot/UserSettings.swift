@@ -1,4 +1,6 @@
 import Foundation
+import SwiftUI
+import UniformTypeIdentifiers
 
 class UserSettings: ObservableObject {
     @Published var deviceAliases: [String: String] = [:]
@@ -181,4 +183,16 @@ struct AudioPreset: Identifiable, Codable, Equatable {
     var name: String
     var inputDeviceName: String
     var outputDeviceName: String
+}
+
+// MARK: - Transferable (for drag & drop)
+
+extension UTType {
+    static let audioPreset = UTType(exportedAs: "com.audiopilot.audiopreset")
+}
+
+extension AudioPreset: Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .audioPreset)
+    }
 }
