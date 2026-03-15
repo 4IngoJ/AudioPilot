@@ -29,6 +29,11 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 cp "$EXEC_PATH" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
+# ── App Icon ──────────────────────────────────────────────────────────────────
+if [ -f "$SCRIPT_DIR/AppIcon.icns" ]; then
+    cp "$SCRIPT_DIR/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+fi
+
 # ── Info.plist ────────────────────────────────────────────────────────────────
 cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -51,6 +56,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
     <string>APPL</string>
     <key>LSUIElement</key>
     <true/>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LSMinimumSystemVersion</key>

@@ -29,6 +29,6 @@ struct MenuBarLabel: View {
     private var labelText: Text {
         let inputName  = audioManager.defaultInputDevice.map  { settings.alias(for: $0) } ?? "–"
         let outputName = audioManager.defaultOutputDevice.map { settings.alias(for: $0) } ?? "–"
-        return Text("🎤 \(inputName)   🎧 \(outputName)")
+        return Text("🎙️ \(inputName)   🎧 \(outputName)")
     }
 }
