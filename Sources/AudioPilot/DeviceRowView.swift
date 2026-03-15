@@ -1,14 +1,18 @@
 import SwiftUI
 
+// MARK: - Visible device row
+
 struct DeviceRowView: View {
     let device: AudioDevice
     let isSelected: Bool
     let onSelect: () -> Void
+    let onHide: () -> Void
 
     @EnvironmentObject var settings: UserSettings
     @State private var isRenaming = false
     @State private var editText = ""
     @FocusState private var textFocused: Bool
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -42,40 +46,61 @@ struct DeviceRowView: View {
             .frame(maxWidth: .infinity)
 
             // ── Action buttons ─────────────────────────────────────
-            if isRenaming {
-                Button(action: commitRename) {
-                    Image(systemName: "checkmark")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.accentColor)
-                }
-                .buttonStyle(.plain)
+            // Fixed-width container so layout never jumps
+            Group {
+                if isRenaming {
+                    HStack(spacing: 4) {
+                        Button(action: commitRename) {
+                            Image(systemName: "checkmark")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(.accentColor)
+                        }
+                        .buttonStyle(.plain)
 
-                Button(action: cancelRename) {
-                    Image(systemName: "xmark")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        Button(action: cancelRename) {
+                            Image(systemName: "xmark")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    HStack(spacing: 4) {
+                        Button(action: startRenaming) {
+                            Image(systemName: "pencil")
+                                .font(.caption)
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Gerät umbenennen")
+
+                        Button(action: onHide) {
+                            Image(systemName: "eye.slash")
+                                .font(.caption)
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Unter 'Weitere Geräte' verschieben")
+                    }
+                    .opacity(isHovered ? 1 : 0)
+                    .allowsHitTesting(isHovered)
                 }
-                .buttonStyle(.plain)
-            } else {
-                Button(action: startRenaming) {
-                    Image(systemName: "pencil")
-                        .font(.caption)
-                        .foregroundColor(.secondary.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-                .help("Gerät umbenennen")
             }
+            .frame(width: 38)
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+                .fill(
+                    isSelected
+                        ? Color.accentColor.opacity(0.12)
+                        : isHovered ? Color.primary.opacity(0.06) : Color.clear
+                )
         )
-        // Set focus once TextField is in the view hierarchy
+        .onHover { isHovered = $0 }
         .onChange(of: isRenaming) { renaming in
             if renaming {
-                // Short delay ensures TextField is rendered before requesting focus
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     textFocused = true
                 }
@@ -97,5 +122,47 @@ struct DeviceRowView: View {
 
     private func cancelRename() {
         isRenaming = false
+    }
+}
+
+// MARK: - Hidden device row (inside "Weitere Geräte")
+
+struct HiddenDeviceRowView: View {
+    let device: AudioDevice
+    let onUnhide: () -> Void
+
+    @EnvironmentObject var settings: UserSettings
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "circle")
+                .foregroundColor(.secondary.opacity(0.3))
+                .frame(width: 16)
+
+            Text(settings.alias(for: device))
+                .font(.system(size: 13))
+                .foregroundColor(.primary.opacity(0.45))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(action: onUnhide) {
+                Image(systemName: "eye")
+                    .font(.caption)
+                    .foregroundColor(.secondary.opacity(0.7))
+            }
+            .buttonStyle(.plain)
+            .help("Zurück in die Hauptliste")
+            .opacity(isHovered ? 1 : 0)
+            .allowsHitTesting(isHovered)
+            .frame(width: 18)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isHovered ? Color.primary.opacity(0.04) : Color.clear)
+        )
+        .onHover { isHovered = $0 }
     }
 }

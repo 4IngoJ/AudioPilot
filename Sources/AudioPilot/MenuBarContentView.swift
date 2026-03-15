@@ -49,6 +49,7 @@ struct MenuBarContentView: View {
                         systemImage: "mic.fill",
                         devices: audioManager.inputDevices,
                         selectedDevice: audioManager.defaultInputDevice,
+                        isInput: true,
                         onSelect: audioManager.setDefaultInput
                     )
 
@@ -60,6 +61,7 @@ struct MenuBarContentView: View {
                         systemImage: "speaker.wave.2.fill",
                         devices: audioManager.outputDevices,
                         selectedDevice: audioManager.defaultOutputDevice,
+                        isInput: false,
                         onSelect: audioManager.setDefaultOutput
                     )
 
@@ -137,7 +139,20 @@ struct DeviceSectionView: View {
     let systemImage: String
     let devices: [AudioDevice]
     let selectedDevice: AudioDevice?
+    let isInput: Bool
     let onSelect: (AudioDevice) -> Void
+
+    @EnvironmentObject var settings: UserSettings
+    @State private var expanded = false
+    @State private var dropTargetedHide   = false
+    @State private var dropTargetedUnhide = false
+
+    private var visibleDevices: [AudioDevice] {
+        devices.filter { !settings.isHidden($0, isInput: isInput) }
+    }
+    private var hiddenDevices: [AudioDevice] {
+        devices.filter { settings.isHidden($0, isInput: isInput) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -151,15 +166,89 @@ struct DeviceSectionView: View {
                     .foregroundStyle(.tertiary)
                     .padding(.vertical, 2)
             } else {
-                ForEach(devices) { device in
-                    DeviceRowView(
-                        device: device,
-                        isSelected: selectedDevice?.id == device.id,
-                        onSelect: { onSelect(device) }
-                    )
+                // ── Visible devices (drop zone: unhide) ───────────
+                VStack(spacing: 2) {
+                    ForEach(visibleDevices) { device in
+                        DeviceRowView(
+                            device: device,
+                            isSelected: selectedDevice?.id == device.id,
+                            onSelect: { onSelect(device) },
+                            onHide: { settings.toggleHidden(device, isInput: isInput) }
+                        )
+                        .onDrag { NSItemProvider(object: device.name as NSString) }
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(
+                            dropTargetedUnhide ? Color.accentColor.opacity(0.5) : Color.clear,
+                            lineWidth: 1
+                        )
+                )
+                .onDrop(of: [.text], isTargeted: $dropTargetedUnhide) { providers in
+                    handleDrop(providers, hide: false)
+                }
+
+                // ── "Weitere Geräte" expandable section ───────────
+                if !hiddenDevices.isEmpty || dropTargetedHide {
+                    VStack(alignment: .leading, spacing: 4) {
+                        // Header / drop zone for hiding
+                        HStack(spacing: 4) {
+                            Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                                .font(.caption2)
+                                .foregroundColor(dropTargetedHide ? .accentColor : .secondary)
+                            Text("Weitere Geräte (\(hiddenDevices.count))")
+                                .font(.caption)
+                                .foregroundStyle(dropTargetedHide ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(dropTargetedHide
+                                      ? Color.accentColor.opacity(0.1)
+                                      : Color.primary.opacity(0.04))
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() } }
+                        .onDrop(of: [.text], isTargeted: $dropTargetedHide) { providers in
+                            handleDrop(providers, hide: true)
+                        }
+
+                        // Hidden device rows
+                        if expanded {
+                            VStack(spacing: 2) {
+                                ForEach(hiddenDevices) { device in
+                                    HiddenDeviceRowView(
+                                        device: device,
+                                        onUnhide: { settings.toggleHidden(device, isInput: isInput) }
+                                    )
+                                    .onDrag { NSItemProvider(object: device.name as NSString) }
+                                }
+                            }
+                            .padding(.leading, 10)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                    .padding(.top, 2)
                 }
             }
         }
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider], hide: Bool) -> Bool {
+        providers.first?.loadObject(ofClass: NSString.self) { item, _ in
+            guard let name = item as? String,
+                  let device = devices.first(where: { $0.name == name }) else { return }
+            let currentlyHidden = settings.isHidden(device, isInput: isInput)
+            DispatchQueue.main.async {
+                if hide && !currentlyHidden { settings.toggleHidden(device, isInput: isInput) }
+                else if !hide && currentlyHidden { settings.toggleHidden(device, isInput: isInput) }
+            }
+        }
+        return true
     }
 }
 
