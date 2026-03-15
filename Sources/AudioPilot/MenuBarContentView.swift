@@ -144,15 +144,11 @@ struct DeviceSectionView: View {
 
     @EnvironmentObject var settings: UserSettings
     @State private var expanded = false
-    @State private var dropTargetedHide   = false
-    @State private var dropTargetedUnhide = false
+    @State private var dropTargetedHide  = false
+    @State private var dropTargetDevice: AudioDevice?
 
-    private var visibleDevices: [AudioDevice] {
-        devices.filter { !settings.isHidden($0, isInput: isInput) }
-    }
-    private var hiddenDevices: [AudioDevice] {
-        devices.filter { settings.isHidden($0, isInput: isInput) }
-    }
+    private var visibleDevices: [AudioDevice] { settings.orderedVisible(devices, isInput: isInput) }
+    private var hiddenDevices:  [AudioDevice] { settings.orderedHidden(devices,  isInput: isInput) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -166,7 +162,7 @@ struct DeviceSectionView: View {
                     .foregroundStyle(.tertiary)
                     .padding(.vertical, 2)
             } else {
-                // ── Visible devices (drop zone: unhide) ───────────
+                // ── Visible devices ───────────────────────────────
                 VStack(spacing: 2) {
                     ForEach(visibleDevices) { device in
                         DeviceRowView(
@@ -175,31 +171,37 @@ struct DeviceSectionView: View {
                             onSelect: { onSelect(device) },
                             onHide: { settings.toggleHidden(device, isInput: isInput) }
                         )
+                        .overlay(alignment: .top) {
+                            if dropTargetDevice?.id == device.id {
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(Color.accentColor)
+                                    .frame(height: 2)
+                                    .padding(.horizontal, 6)
+                            }
+                        }
                         .onDrag { NSItemProvider(object: device.name as NSString) }
+                        .onDrop(of: [.text],
+                                isTargeted: Binding(
+                                    get: { dropTargetDevice?.id == device.id },
+                                    set: { dropTargetDevice = $0 ? device : nil }
+                                )) { providers in
+                            handleRowDrop(providers, onto: device)
+                        }
                     }
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(
-                            dropTargetedUnhide ? Color.accentColor.opacity(0.5) : Color.clear,
-                            lineWidth: 1
-                        )
-                )
-                .onDrop(of: [.text], isTargeted: $dropTargetedUnhide) { providers in
-                    handleDrop(providers, hide: false)
-                }
 
-                // ── "Weitere Geräte" expandable section ───────────
+                // ── "Weitere Geräte" collapsible section ──────────
                 if !hiddenDevices.isEmpty || dropTargetedHide {
                     VStack(alignment: .leading, spacing: 4) {
-                        // Header / drop zone for hiding
                         HStack(spacing: 4) {
                             Image(systemName: expanded ? "chevron.down" : "chevron.right")
                                 .font(.caption2)
                                 .foregroundColor(dropTargetedHide ? .accentColor : .secondary)
                             Text("Weitere Geräte (\(hiddenDevices.count))")
                                 .font(.caption)
-                                .foregroundStyle(dropTargetedHide ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                                .foregroundStyle(dropTargetedHide
+                                                 ? AnyShapeStyle(.tint)
+                                                 : AnyShapeStyle(.secondary))
                             Spacer()
                         }
                         .frame(maxWidth: .infinity)
@@ -214,10 +216,9 @@ struct DeviceSectionView: View {
                         .contentShape(Rectangle())
                         .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() } }
                         .onDrop(of: [.text], isTargeted: $dropTargetedHide) { providers in
-                            handleDrop(providers, hide: true)
+                            handleHideDrop(providers)
                         }
 
-                        // Hidden device rows
                         if expanded {
                             VStack(spacing: 2) {
                                 ForEach(hiddenDevices) { device in
@@ -238,14 +239,32 @@ struct DeviceSectionView: View {
         }
     }
 
-    private func handleDrop(_ providers: [NSItemProvider], hide: Bool) -> Bool {
+    // Drop onto a visible row → reorder (+ unhide if needed)
+    private func handleRowDrop(_ providers: [NSItemProvider], onto target: AudioDevice) -> Bool {
+        providers.first?.loadObject(ofClass: NSString.self) { item, _ in
+            guard let name = item as? String else { return }
+            DispatchQueue.main.async {
+                if let device = devices.first(where: { $0.name == name }),
+                   settings.isHidden(device, isInput: isInput) {
+                    settings.toggleHidden(device, isInput: isInput)
+                }
+                settings.moveDevice(named: name, before: target.name,
+                                    isInput: isInput, allDevices: devices)
+                dropTargetDevice = nil
+            }
+        }
+        return true
+    }
+
+    // Drop onto "Weitere Geräte" header → hide
+    private func handleHideDrop(_ providers: [NSItemProvider]) -> Bool {
         providers.first?.loadObject(ofClass: NSString.self) { item, _ in
             guard let name = item as? String,
                   let device = devices.first(where: { $0.name == name }) else { return }
-            let currentlyHidden = settings.isHidden(device, isInput: isInput)
             DispatchQueue.main.async {
-                if hide && !currentlyHidden { settings.toggleHidden(device, isInput: isInput) }
-                else if !hide && currentlyHidden { settings.toggleHidden(device, isInput: isInput) }
+                if !settings.isHidden(device, isInput: isInput) {
+                    settings.toggleHidden(device, isInput: isInput)
+                }
             }
         }
         return true
@@ -257,6 +276,12 @@ struct DeviceSectionView: View {
 struct PresetsView: View {
     @EnvironmentObject var audioManager: AudioManager
     @EnvironmentObject var settings: UserSettings
+    @State private var expandedHidden   = false
+    @State private var dropTargetedHide = false
+    @State private var dropTargetPreset: AudioPreset?
+
+    private var visiblePresets: [AudioPreset] { settings.presets.filter { !settings.isPresetHidden($0) } }
+    private var hiddenPresets:  [AudioPreset] { settings.presets.filter {  settings.isPresetHidden($0) } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -264,29 +289,68 @@ struct PresetsView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            ForEach(settings.presets) { preset in
-                HStack {
-                    Button { applyPreset(preset) } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "play.circle")
-                                .foregroundStyle(.tint)
-                            Text(preset.name)
-                                .font(.system(size: 13))
-                                .foregroundColor(.primary)
-                            Spacer()
+            // ── Visible presets ────────────────────────────────────
+            ForEach(visiblePresets) { preset in
+                PresetRowView(preset: preset, onApply: { applyPreset(preset) })
+                    .overlay(alignment: .top) {
+                        if dropTargetPreset?.id == preset.id {
+                            RoundedRectangle(cornerRadius: 1)
+                                .fill(Color.accentColor)
+                                .frame(height: 2)
+                                .padding(.horizontal, 6)
                         }
                     }
-                    .buttonStyle(.plain)
-
-                    Button { settings.removePreset(id: preset.id) } label: {
-                        Image(systemName: "trash")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    .onDrag { NSItemProvider(object: preset.id.uuidString as NSString) }
+                    .onDrop(of: [.text],
+                            isTargeted: Binding(
+                                get: { dropTargetPreset?.id == preset.id },
+                                set: { dropTargetPreset = $0 ? preset : nil }
+                            )) { providers in
+                        handlePresetRowDrop(providers, onto: preset)
                     }
-                    .buttonStyle(.plain)
+            }
+
+            // ── "Weitere Presets" section ──────────────────────────
+            if !hiddenPresets.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: expandedHidden ? "chevron.down" : "chevron.right")
+                            .font(.caption2)
+                            .foregroundColor(dropTargetedHide ? .accentColor : .secondary)
+                        Text("Weitere Presets (\(hiddenPresets.count))")
+                            .font(.caption)
+                            .foregroundStyle(dropTargetedHide
+                                             ? AnyShapeStyle(.tint)
+                                             : AnyShapeStyle(.secondary))
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 3)
+                    .padding(.horizontal, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(dropTargetedHide
+                                  ? Color.accentColor.opacity(0.1)
+                                  : Color.primary.opacity(0.04))
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { expandedHidden.toggle() } }
+                    .onDrop(of: [.text], isTargeted: $dropTargetedHide) { providers in
+                        handlePresetHideDrop(providers)
+                    }
+
+                    if expandedHidden {
+                        VStack(spacing: 2) {
+                            ForEach(hiddenPresets) { preset in
+                                HiddenPresetRowView(preset: preset)
+                                    .onDrag { NSItemProvider(object: preset.id.uuidString as NSString) }
+                            }
+                        }
+                        .padding(.leading, 10)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
-                .padding(.vertical, 2)
-                .padding(.horizontal, 6)
+                .padding(.top, 2)
             }
         }
     }
@@ -298,6 +362,200 @@ struct PresetsView: View {
         if let output = audioManager.outputDevices.first(where: { $0.name == preset.outputDeviceName }) {
             audioManager.setDefaultOutput(output)
         }
+    }
+
+    private func handlePresetRowDrop(_ providers: [NSItemProvider], onto target: AudioPreset) -> Bool {
+        providers.first?.loadObject(ofClass: NSString.self) { item, _ in
+            guard let idStr = item as? String, let id = UUID(uuidString: idStr) else { return }
+            DispatchQueue.main.async {
+                guard let from = settings.presets.firstIndex(where: { $0.id == id }),
+                      let to   = settings.presets.firstIndex(where: { $0.id == target.id }) else { return }
+                if let preset = settings.presets.first(where: { $0.id == id }),
+                   settings.isPresetHidden(preset) {
+                    settings.togglePresetHidden(preset)
+                }
+                settings.movePresets(from: IndexSet(integer: from), to: to > from ? to + 1 : to)
+                dropTargetPreset = nil
+            }
+        }
+        return true
+    }
+
+    private func handlePresetHideDrop(_ providers: [NSItemProvider]) -> Bool {
+        providers.first?.loadObject(ofClass: NSString.self) { item, _ in
+            guard let idStr = item as? String, let id = UUID(uuidString: idStr) else { return }
+            DispatchQueue.main.async {
+                if let preset = settings.presets.first(where: { $0.id == id }),
+                   !settings.isPresetHidden(preset) {
+                    settings.togglePresetHidden(preset)
+                }
+            }
+        }
+        return true
+    }
+}
+
+// MARK: - Preset Row (visible)
+
+struct PresetRowView: View {
+    let preset: AudioPreset
+    let onApply: () -> Void
+
+    @EnvironmentObject var settings: UserSettings
+    @State private var isRenaming = false
+    @State private var editText = ""
+    @FocusState private var focused: Bool
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(action: { if !isRenaming { onApply() } }) {
+                Image(systemName: "play.circle")
+                    .foregroundStyle(.tint)
+                    .font(.system(size: 14))
+            }
+            .buttonStyle(.plain)
+
+            Group {
+                if isRenaming {
+                    TextField("Name", text: $editText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .focused($focused)
+                        .onSubmit { commitRename() }
+                        .onExitCommand { cancelRename() }
+                } else {
+                    Text(preset.name)
+                        .font(.system(size: 13))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            HStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption2)
+                    .foregroundColor(.secondary.opacity(isHovered ? 0.55 : 0.18))
+                    .frame(width: 14)
+
+                if isRenaming {
+                    Button(action: commitRename) {
+                        Image(systemName: "checkmark")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.accentColor)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: cancelRename) {
+                        Image(systemName: "xmark")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button(action: { settings.togglePresetHidden(preset) }) {
+                        Image(systemName: "eye.slash")
+                            .font(.caption)
+                            .foregroundColor(.secondary.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Unter 'Weitere Presets' verschieben")
+                    .opacity(isHovered ? 1 : 0)
+                    .allowsHitTesting(isHovered)
+
+                    Button(action: startRenaming) {
+                        Image(systemName: "pencil")
+                            .font(.caption)
+                            .foregroundColor(.secondary.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Preset umbenennen")
+                    .opacity(isHovered ? 1 : 0)
+                    .allowsHitTesting(isHovered)
+
+                    Button(action: { settings.removePreset(id: preset.id) }) {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(width: 64)
+        }
+        .padding(.vertical, 2)
+        .padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isHovered ? Color.primary.opacity(0.06) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .onChange(of: isRenaming) { renaming in
+            if renaming {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { focused = true }
+            }
+        }
+    }
+
+    private func startRenaming() { editText = preset.name; isRenaming = true }
+    private func commitRename() {
+        let name = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { settings.renamePreset(id: preset.id, to: name) }
+        isRenaming = false
+    }
+    private func cancelRename() { isRenaming = false }
+}
+
+// MARK: - Preset Row (hidden)
+
+struct HiddenPresetRowView: View {
+    let preset: AudioPreset
+    @EnvironmentObject var settings: UserSettings
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "play.circle")
+                .foregroundColor(.secondary.opacity(0.3))
+                .font(.system(size: 14))
+
+            Text(preset.name)
+                .font(.system(size: 13))
+                .foregroundColor(.primary.opacity(0.45))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption2)
+                    .foregroundColor(.secondary.opacity(isHovered ? 0.55 : 0.18))
+                    .frame(width: 14)
+
+                Button(action: { settings.togglePresetHidden(preset) }) {
+                    Image(systemName: "eye")
+                        .font(.caption)
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .help("Zurück in die Hauptliste")
+                .opacity(isHovered ? 1 : 0)
+                .allowsHitTesting(isHovered)
+                .frame(width: 16)
+            }
+            .frame(width: 34)
+        }
+        .padding(.vertical, 2)
+        .padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isHovered ? Color.primary.opacity(0.04) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
     }
 }
 

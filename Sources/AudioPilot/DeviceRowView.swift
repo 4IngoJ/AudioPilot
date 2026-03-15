@@ -45,48 +45,51 @@ struct DeviceRowView: View {
             }
             .frame(maxWidth: .infinity)
 
-            // ── Action buttons ─────────────────────────────────────
-            // Fixed-width container so layout never jumps
-            Group {
+            // ── Right action group (fixed width, no layout jumps) ──
+            HStack(spacing: 4) {
+                // Drag handle: always present, brightens on hover
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption2)
+                    .foregroundColor(.secondary.opacity(isHovered ? 0.55 : 0.18))
+                    .frame(width: 14)
+
                 if isRenaming {
-                    HStack(spacing: 4) {
-                        Button(action: commitRename) {
-                            Image(systemName: "checkmark")
-                                .font(.caption.weight(.semibold))
-                                .foregroundColor(.accentColor)
-                        }
-                        .buttonStyle(.plain)
-
-                        Button(action: cancelRename) {
-                            Image(systemName: "xmark")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .buttonStyle(.plain)
+                    Button(action: commitRename) {
+                        Image(systemName: "checkmark")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.accentColor)
                     }
+                    .buttonStyle(.plain)
+
+                    Button(action: cancelRename) {
+                        Image(systemName: "xmark")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
                 } else {
-                    HStack(spacing: 4) {
-                        Button(action: startRenaming) {
-                            Image(systemName: "pencil")
-                                .font(.caption)
-                                .foregroundColor(.secondary.opacity(0.7))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Gerät umbenennen")
-
-                        Button(action: onHide) {
-                            Image(systemName: "eye.slash")
-                                .font(.caption)
-                                .foregroundColor(.secondary.opacity(0.7))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Unter 'Weitere Geräte' verschieben")
+                    Button(action: startRenaming) {
+                        Image(systemName: "pencil")
+                            .font(.caption)
+                            .foregroundColor(.secondary.opacity(0.7))
                     }
+                    .buttonStyle(.plain)
+                    .help("Gerät umbenennen")
+                    .opacity(isHovered ? 1 : 0)
+                    .allowsHitTesting(isHovered)
+
+                    Button(action: onHide) {
+                        Image(systemName: "eye.slash")
+                            .font(.caption)
+                            .foregroundColor(.secondary.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Unter 'Weitere Geräte' verschieben")
                     .opacity(isHovered ? 1 : 0)
                     .allowsHitTesting(isHovered)
                 }
             }
-            .frame(width: 38)
+            .frame(width: 52)
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
@@ -98,34 +101,21 @@ struct DeviceRowView: View {
                         : isHovered ? Color.primary.opacity(0.06) : Color.clear
                 )
         )
+        .contentShape(Rectangle())   // full-line hover detection
         .onHover { isHovered = $0 }
         .onChange(of: isRenaming) { renaming in
             if renaming {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    textFocused = true
-                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { textFocused = true }
             }
         }
     }
 
-    // MARK: - Rename helpers
-
-    private func startRenaming() {
-        editText = settings.alias(for: device)
-        isRenaming = true
-    }
-
-    private func commitRename() {
-        settings.setAlias(editText, for: device)
-        isRenaming = false
-    }
-
-    private func cancelRename() {
-        isRenaming = false
-    }
+    private func startRenaming() { editText = settings.alias(for: device); isRenaming = true }
+    private func commitRename()  { settings.setAlias(editText, for: device); isRenaming = false }
+    private func cancelRename()  { isRenaming = false }
 }
 
-// MARK: - Hidden device row (inside "Weitere Geräte")
+// MARK: - Hidden device row
 
 struct HiddenDeviceRowView: View {
     let device: AudioDevice
@@ -146,16 +136,24 @@ struct HiddenDeviceRowView: View {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button(action: onUnhide) {
-                Image(systemName: "eye")
-                    .font(.caption)
-                    .foregroundColor(.secondary.opacity(0.7))
+            HStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption2)
+                    .foregroundColor(.secondary.opacity(isHovered ? 0.55 : 0.18))
+                    .frame(width: 14)
+
+                Button(action: onUnhide) {
+                    Image(systemName: "eye")
+                        .font(.caption)
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .help("Zurück in die Hauptliste")
+                .opacity(isHovered ? 1 : 0)
+                .allowsHitTesting(isHovered)
+                .frame(width: 16)
             }
-            .buttonStyle(.plain)
-            .help("Zurück in die Hauptliste")
-            .opacity(isHovered ? 1 : 0)
-            .allowsHitTesting(isHovered)
-            .frame(width: 18)
+            .frame(width: 34)
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
@@ -163,6 +161,7 @@ struct HiddenDeviceRowView: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isHovered ? Color.primary.opacity(0.04) : Color.clear)
         )
+        .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }
 }
