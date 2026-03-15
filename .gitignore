@@ -1,0 +1,23 @@
+# Swift build artifacts
+.build/
+*.o
+*.d
+
+# App bundles and distribution
+*.app
+*.dmg
+*.zip
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# SwiftPM
+.swiftpm/
